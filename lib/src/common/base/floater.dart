@@ -229,15 +229,6 @@ class FloaterAnchor {
   }
 }
 
-extension EdgeInsetsPositive on EdgeInsets {
-  EdgeInsets positive() => EdgeInsets.only(
-        top: max(0, top),
-        bottom: max(0, bottom),
-        left: max(0, left),
-        right: max(0, right),
-      );
-}
-
 /// A widget that can float next to a [FloaterTarget], inheriting its size.
 ///
 /// Floaters use the surrounding [Overlay] to position themselves.
@@ -252,6 +243,7 @@ class Floater extends StatefulWidget {
     this.padding = EdgeInsets.zero,
     this.autoFlip = false,
     this.autoFlipHeight = 100,
+    this.visible = true,
   });
 
   /// The widget below this widget in the tree.
@@ -294,6 +286,11 @@ class Floater extends StatefulWidget {
   /// The minimum height of the floater before it attempts to flip direction.
   final double autoFlipHeight;
 
+  /// Whether the floater overlay is visible.
+  ///
+  /// When false, the overlay is hidden and position updates are skipped.
+  final bool visible;
+
   /// Returns the [FloaterData] of the closest [Floater] ancestor, or null if there is no [Floater] ancestor.
   static FloaterData? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_FloaterProvider>()?.data;
@@ -325,9 +322,7 @@ class Floater extends StatefulWidget {
 
 class _FloaterState extends State<Floater> with WidgetsBindingObserver {
   OverlayPortalController controller = OverlayPortalController();
-
   List<Object?>? dependencies;
-  EdgeInsets? insets;
 
   @override
   void initState() {
@@ -335,6 +330,18 @@ class _FloaterState extends State<Floater> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     widget.link.addListener(updateOverlay);
     maybeUpdateOverlay();
+  }
+
+  @override
+  void didUpdateWidget(covariant Floater oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.link != widget.link) {
+      oldWidget.link.removeListener(updateOverlay);
+      widget.link.addListener(updateOverlay);
+    }
+    if (widget.visible && !oldWidget.visible) {
+      updateOverlay();
+    }
   }
 
   @override
@@ -352,14 +359,7 @@ class _FloaterState extends State<Floater> with WidgetsBindingObserver {
 
   @override
   void didChangeMetrics() {
-    // When the keyboard is toggled, we need to update the floater,
-    // since its constraints might have changed.
-    OverlayState overlay = Overlay.of(context);
-    MediaQueryData mediaQuery = MediaQuery.of(overlay.context);
-    if (insets != mediaQuery.viewInsets) {
-      insets = mediaQuery.viewInsets;
-      updateOverlay();
-    }
+    updateOverlay();
   }
 
   void maybeUpdateOverlay() {
@@ -371,6 +371,7 @@ class _FloaterState extends State<Floater> with WidgetsBindingObserver {
   }
 
   void updateOverlay() {
+    if (!widget.visible) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {});
@@ -388,24 +389,22 @@ class _FloaterState extends State<Floater> with WidgetsBindingObserver {
 
   ({Size size, Offset offset, EdgeInsets viewPadding}) getOverlayConstraints(
       OverlayState overlay) {
-    final RenderBox overlayBox =
-        overlay.context.findRenderObject()! as RenderBox;
+    final RenderBox? overlayBox =
+        overlay.context.findRenderObject() as RenderBox?;
+
+    if (overlayBox == null || !overlayBox.hasSize) {
+      return (
+        size: Size.zero,
+        offset: Offset.zero,
+        viewPadding: EdgeInsets.zero,
+      );
+    }
 
     Offset overlayOffset = overlayBox.localToGlobal(Offset.zero);
     Size overlaySize = overlayBox.size;
 
     MediaQueryData mediaQuery = MediaQuery.of(overlay.context);
-    EdgeInsets viewPadding = mediaQuery.padding;
-
-    overlayOffset = Offset(
-      overlayOffset.dx,
-      overlayOffset.dy,
-    );
-
-    overlaySize = Size(
-      overlaySize.width,
-      overlaySize.height,
-    );
+    EdgeInsets viewPadding = mediaQuery.padding + mediaQuery.viewInsets;
 
     return (
       size: overlaySize,
@@ -414,149 +413,167 @@ class _FloaterState extends State<Floater> with WidgetsBindingObserver {
     );
   }
 
-  Size getDirectionSize(
+  /// Computes the floater's bounding rectangle in screen coordinates.
+  ///
+  /// The anchor booleans are direction-relative:
+  ///   top = main axis start (near target)
+  ///   bottom = main axis end (far from target)
+  ///   left = cross axis start
+  ///   right = cross axis end
+  ///
+  /// Main axis states:
+  ///   T,F → home side only (standard)
+  ///   T,T → target overlap
+  ///   F,F → expand through target (target + home)
+  ///   F,T → shifted to opposite side (opposite + target)
+  ///
+  /// Cross axis states:
+  ///   T,T → target extent only
+  ///   T,F → extend toward cross end
+  ///   F,T → extend toward cross start
+  ///   F,F → full cross extent
+  Rect getFloaterRect(
     AxisDirection direction,
     Size space,
     Offset offset,
     Size size,
     FloaterAnchor anchor,
-  ) =>
-      switch (direction) {
-        AxisDirection.down => Size(
-            space.width,
-            switch ((anchor.top, anchor.bottom)) {
-              (true, true) => size.height,
-              (true, false) => space.height - offset.dy.abs(),
-              (false, true) => size.height * 2,
-              (false, false) => space.height - offset.dy.abs(),
-            }),
-        AxisDirection.up => Size(
-            space.width,
-            switch ((anchor.top, anchor.bottom)) {
-              (true, true) => size.height,
-              (true, false) => offset.dy + size.height,
-              (false, true) => size.height * 2,
-              (false, false) => offset.dy + size.height,
-            }),
-        AxisDirection.left => Size(
-            switch ((anchor.top, anchor.bottom)) {
-              (true, true) => min(size.width, offset.dx),
-              (true, false) => offset.dx,
-              (false, true) => min(size.width * 2, offset.dx + size.width),
-              (false, false) => offset.dx + size.width,
-            },
-            space.height,
-          ),
-        AxisDirection.right => Size(
-            switch ((anchor.top, anchor.bottom)) {
-              (true, true) => min(size.width, space.width - offset.dx),
-              (true, false) => space.width - offset.dx,
-              (false, true) =>
-                min(size.width * 2, space.width - offset.dx + size.width),
-              (false, false) => space.width - offset.dx + size.width,
-            },
-            space.height,
-          ),
-      };
+  ) {
+    final targetRect = offset & size;
 
-  EdgeInsets getDirectionInsets(
+    // Main axis: determine the vertical (or horizontal) span
+    final (double mainStart, double mainEnd) = _mainAxisSpan(
+      direction,
+      space,
+      targetRect,
+      anchor.top,
+      anchor.bottom,
+    );
+
+    // Cross axis: determine the horizontal (or vertical) span
+    final (double crossStart, double crossEnd) = _crossAxisSpan(
+      direction,
+      space,
+      targetRect,
+      anchor.left,
+      anchor.right,
+    );
+
+    final bool mainIsVertical =
+        direction == AxisDirection.down || direction == AxisDirection.up;
+
+    if (mainIsVertical) {
+      return Rect.fromLTRB(crossStart, mainStart, crossEnd, mainEnd);
+    } else {
+      return Rect.fromLTRB(mainStart, crossStart, mainEnd, crossEnd);
+    }
+  }
+
+  /// Computes the main-axis span (start, end) in screen coordinates.
+  (double, double) _mainAxisSpan(
     AxisDirection direction,
     Size space,
-    Offset offset,
-    Size size,
-    FloaterAnchor anchor,
-  ) =>
+    Rect target,
+    bool anchorTop,
+    bool anchorBottom,
+  ) {
+    // "home" = the region on the opening side of the target
+    // "opposite" = the region on the far side from the opening direction
+    // "target" = the target's own extent
+
+    final bool mainIsVertical =
+        direction == AxisDirection.down || direction == AxisDirection.up;
+
+    final double spaceEnd = mainIsVertical ? space.height : space.width;
+    final double targetStart = mainIsVertical ? target.top : target.left;
+    final double targetEnd = mainIsVertical ? target.bottom : target.right;
+
+    // home and opposite depend on which way we're opening
+    final bool opensPositive =
+        direction == AxisDirection.down || direction == AxisDirection.right;
+
+    final double homeStart = opensPositive ? targetEnd : 0;
+    final double homeEnd = opensPositive ? spaceEnd : targetStart;
+    final double oppositeStart = opensPositive ? 0 : targetEnd;
+    final double oppositeEnd = opensPositive ? targetStart : spaceEnd;
+
+    if (anchorTop && !anchorBottom) {
+      // Standard: home side only
+      return (homeStart, homeEnd);
+    } else if (anchorTop && anchorBottom) {
+      // Overlap target
+      return (targetStart, targetEnd);
+    } else if (!anchorTop && !anchorBottom) {
+      // Expand through target (target + home)
+      return (min(targetStart, homeStart), max(targetEnd, homeEnd));
+    } else {
+      // Shifted opposite (opposite + target)
+      return (min(oppositeStart, targetStart), max(oppositeEnd, targetEnd));
+    }
+  }
+
+  /// Computes the cross-axis span (start, end) in screen coordinates.
+  (double, double) _crossAxisSpan(
+    AxisDirection direction,
+    Size space,
+    Rect target,
+    bool anchorLeft,
+    bool anchorRight,
+  ) {
+    final bool mainIsVertical =
+        direction == AxisDirection.down || direction == AxisDirection.up;
+
+    final double spaceEnd = mainIsVertical ? space.width : space.height;
+    final double targetStart = mainIsVertical ? target.left : target.top;
+    final double targetEnd = mainIsVertical ? target.right : target.bottom;
+
+    final double start = anchorLeft ? targetStart : 0;
+    final double end = anchorRight ? targetEnd : spaceEnd;
+
+    return (start, end);
+  }
+
+  /// Maps direction-relative padding to screen-coordinate EdgeInsets.
+  ///
+  /// Direction-relative: top=main start, bottom=main end, left=cross start, right=cross end.
+  /// Screen coordinates: top/bottom/left/right are absolute.
+  EdgeInsets mapPaddingToScreen(AxisDirection direction, EdgeInsets padding) =>
       switch (direction) {
         AxisDirection.down => EdgeInsets.only(
-            top: (anchor.top ? size.height : 0) + offset.dy,
-            left: anchor.left ? offset.dx : 0,
-            right: anchor.right ? space.width - offset.dx - size.width : 0,
+            top: padding.top,
+            bottom: padding.bottom,
+            left: padding.left,
+            right: padding.right,
           ),
         AxisDirection.up => EdgeInsets.only(
-            bottom: (anchor.top ? size.height : 0) +
-                space.height -
-                offset.dy -
-                size.height,
-            left: anchor.left ? offset.dx : 0,
-            right: anchor.right ? space.width - offset.dx - size.width : 0,
-          ),
-        AxisDirection.left => EdgeInsets.only(
-            right: (anchor.top ? size.width : 0) +
-                space.width -
-                offset.dx -
-                size.width,
-            top: anchor.left ? offset.dy : 0,
-            bottom: anchor.right ? space.height - offset.dy - size.height : 0,
-          ),
-        AxisDirection.right => EdgeInsets.only(
-            left: (anchor.top ? size.width : 0) + offset.dx,
-            top: anchor.left ? offset.dy : 0,
-            bottom: anchor.right ? space.height - offset.dy - size.height : 0,
-          ),
-      }
-          .positive();
-
-  EdgeInsets getDirectionPadding(
-    AxisDirection direction,
-    EdgeInsets padding,
-  ) =>
-      switch (direction) {
-        AxisDirection.down => padding,
-        AxisDirection.up => EdgeInsets.only(
-            top: padding.bottom,
             bottom: padding.top,
+            top: padding.bottom,
             left: padding.left,
             right: padding.right,
           ),
         AxisDirection.left => EdgeInsets.only(
-            top: padding.left,
-            bottom: padding.right,
             right: padding.top,
             left: padding.bottom,
-          ),
-        AxisDirection.right => EdgeInsets.only(
             top: padding.left,
             bottom: padding.right,
-            right: padding.bottom,
+          ),
+        AxisDirection.right => EdgeInsets.only(
             left: padding.top,
+            right: padding.bottom,
+            top: padding.left,
+            bottom: padding.right,
           ),
       };
 
-  (Alignment, Alignment) getDirectionAnchors(
-    AxisDirection direction,
-  ) =>
-      switch (direction) {
-        AxisDirection.down => (Alignment.topCenter, Alignment.topCenter),
-        AxisDirection.up => (Alignment.bottomCenter, Alignment.bottomCenter),
-        AxisDirection.left => (Alignment.centerRight, Alignment.centerRight),
-        AxisDirection.right => (Alignment.centerLeft, Alignment.centerLeft),
-      };
-
-  Offset getDirectionOffset(
-    AxisDirection direction,
-    Size space,
-    Offset offset,
-    Size size,
-    FloaterAnchor anchor,
-  ) =>
-      switch (direction) {
-        AxisDirection.down => Offset(
-            ((space.width - offset.dx - size.width) - offset.dx) / 2,
-            -offset.dy,
-          ),
-        AxisDirection.up => Offset(
-            ((space.width - offset.dx - size.width) - offset.dx) / 2,
-            space.height - offset.dy - size.height,
-          ),
-        AxisDirection.left => Offset(
-            offset.dx,
-            ((space.height - offset.dy - size.height) - offset.dy) / 2,
-          ),
-        AxisDirection.right => Offset(
-            -offset.dx,
-            ((space.height - offset.dy - size.height) - offset.dy) / 2,
-          ),
-      };
+  /// Shrinks a rect by the given insets, clamping to zero size.
+  Rect deflateRect(Rect rect, EdgeInsets insets) {
+    return Rect.fromLTRB(
+      rect.left + insets.left,
+      rect.top + insets.top,
+      max(rect.left + insets.left, rect.right - insets.right),
+      max(rect.top + insets.top, rect.bottom - insets.bottom),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -567,99 +584,107 @@ class _FloaterState extends State<Floater> with WidgetsBindingObserver {
         builder: (context) {
           final (size: size, offset: linkOffset) = widget.link.value;
 
-          // TODO: use viewPadding
-          final (size: space, offset: overlayOffset, :viewPadding) =
+          final (size: overlaySize, offset: overlayOffset, :viewPadding) =
               getOverlayConstraints(Overlay.of(context));
 
-          Offset offset = linkOffset - overlayOffset;
+          final offset = linkOffset - overlayOffset;
+
+          if (offset.dx.isNaN || offset.dy.isNaN) {
+            return const SizedBox.shrink();
+          }
+
+          final space = Size(
+            max(0, overlaySize.width - viewPadding.horizontal),
+            max(0, overlaySize.height - viewPadding.vertical),
+          );
+          final spaceOffset = Offset(
+            offset.dx - viewPadding.left,
+            offset.dy - viewPadding.top,
+          );
+
           AxisDirection direction = widget.direction;
 
-          Size area = getDirectionSize(
+          Rect floaterRect = getFloaterRect(
             direction,
             space,
-            offset,
+            spaceOffset,
             size,
             widget.anchor,
           );
 
-          EdgeInsets insets;
+          floaterRect =
+              floaterRect.shift(Offset(viewPadding.left, viewPadding.top));
 
-          if (widget.autoFlip && area.height < widget.autoFlipHeight) {
-            AxisDirection opposite = flipAxisDirection(widget.direction);
-            Size maybeArea = getDirectionSize(
-              opposite,
-              space,
-              offset,
-              size,
-              widget.anchor,
-            );
+          final screenPadding = mapPaddingToScreen(direction, widget.padding);
+          floaterRect = deflateRect(floaterRect, screenPadding);
 
-            if (maybeArea.height > size.height) {
-              direction = opposite;
-              area = maybeArea;
+          if (widget.autoFlip) {
+            final mainSize =
+                direction == AxisDirection.down || direction == AxisDirection.up
+                    ? floaterRect.height
+                    : floaterRect.width;
+
+            if (mainSize < widget.autoFlipHeight) {
+              final opposite = flipAxisDirection(widget.direction);
+              var flippedRect = getFloaterRect(
+                opposite,
+                space,
+                spaceOffset,
+                size,
+                widget.anchor,
+              );
+              flippedRect =
+                  flippedRect.shift(Offset(viewPadding.left, viewPadding.top));
+              flippedRect = deflateRect(
+                  flippedRect, mapPaddingToScreen(opposite, widget.padding));
+
+              final flippedMainSize =
+                  opposite == AxisDirection.down || opposite == AxisDirection.up
+                      ? flippedRect.height
+                      : flippedRect.width;
+
+              if (flippedMainSize > mainSize) {
+                direction = opposite;
+                floaterRect = flippedRect;
+              }
             }
-
-            insets = getDirectionInsets(
-              direction,
-              space,
-              offset,
-              size,
-              widget.anchor,
-            );
-          } else {
-            insets = getDirectionInsets(
-              direction,
-              space,
-              offset,
-              size,
-              widget.anchor,
-            );
           }
 
-          area = Size(
-            max(0, area.width),
-            max(0, area.height),
-          );
+          final floaterSize = floaterRect.size;
+          final floaterOffset = floaterRect.topLeft - offset;
 
-          final (targetAnchor, followerAnchor) = getDirectionAnchors(direction);
-          // viewPadding = getDirectionPadding(direction, viewPadding);
-
-          final padding = (insets +
-                  getDirectionPadding(
-                    direction,
-                    widget.padding,
-                  ))
-              .positive();
-
-          BoxConstraints constraints = BoxConstraints(
-            maxWidth: area.width,
-            maxHeight: area.height,
-          );
+          final overlayWidth = overlaySize.width;
+          final overlayHeight = overlaySize.height;
 
           return CompositedTransformFollower(
             showWhenUnlinked: false,
             link: widget.link.layerLink,
-            targetAnchor: targetAnchor,
-            followerAnchor: followerAnchor,
-            offset: getDirectionOffset(
-              direction,
-              space,
-              offset,
-              size,
-              widget.anchor,
-            ),
+            targetAnchor: Alignment.topLeft,
+            followerAnchor: Alignment.topLeft,
+            offset: floaterOffset,
             child: Padding(
-              padding: padding,
+              padding: EdgeInsets.only(
+                right: max(0, overlayWidth - floaterSize.width),
+                bottom: max(0, overlayHeight - floaterSize.height),
+              ),
               child: MediaQuery.removePadding(
                 context: context,
                 child: Align(
-                  alignment: followerAnchor,
+                  alignment: switch (direction) {
+                    AxisDirection.down => Alignment.topLeft,
+                    AxisDirection.up => Alignment.bottomLeft,
+                    AxisDirection.left => Alignment.topRight,
+                    AxisDirection.right => Alignment.topLeft,
+                  },
                   child: ConstrainedBox(
-                    constraints: constraints,
+                    constraints: BoxConstraints(
+                      maxWidth: floaterSize.width,
+                      maxHeight: floaterSize.height,
+                    ),
                     child: _FloaterProvider(
                       data: FloaterData(
-                        size: area,
-                        offset: offset,
+                        size: floaterSize,
+                        offset: floaterRect.topLeft,
                         direction: widget.direction,
                         effectiveDirection: direction,
                       ),

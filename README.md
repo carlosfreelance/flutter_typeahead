@@ -167,7 +167,6 @@ You can do so with the following parameters:
 - `hideOnError`: Hide the suggestions box when there is an error retrieving suggestions. This ignores the `errorBuilder`.
 - `hideOnSelect`: Hide the suggestions box when a suggestion is selected. `True` by default.
 - `hideOnUnfocus`: Hide the suggestions box when the `TextField` loses focus. `True` by default.
-- `hideWithKeyboard`: Hide the suggestions box when the keyboard is hidden. `True` by default.
 
 You can also very generally hide the suggestions box by returning `null` from the `suggestionsCallback`.
 This is different from returning an empty list, which will show the empty widget.
@@ -290,7 +289,52 @@ If you want to force the suggestions to update, you can use the `SuggestionsCont
 mySuggestionsController.refresh();
 ```
 
+### My suggestions box grows while scrolling, then disappears and reappears
+
+The suggestions box uses the overlay to position itself relative to the text field.
+Its available size is based on the remaining screen space, which changes as you scroll.
+If the scrollable virtualizes its children (removing offscreen widgets from the tree),
+the text field gets unmounted and the suggestions box disappears.
+
+To fix this:
+
+1. Ensure the scrollable keeps the TypeAheadField in the tree while scrolling.
+   Use a non-virtualizing scrollable like `SingleChildScrollView` with a `Column`.
+   Note that `ListView` (even with `shrinkWrap: true`) still culls offscreen children.
+
+2. Constrain the maximum height of the suggestions box with `constraints: BoxConstraints(maxHeight: 200)` so it doesn't grow with available space.
+
+### My suggestions box overlaps with other pages in a PageView
+
+When the TypeAheadField is inside a `PageView` or `TabBarView` with `constrainWidth: false`,
+the suggestions box extends to the full overlay width, which can overlap adjacent pages.
+
+To fix this, wrap each page in its own `Overlay`:
+
+```dart
+PageView(
+  children: [
+    Overlay(
+      initialEntries: [
+        OverlayEntry(
+          builder: (context) => MyPageWithTypeAhead(),
+        ),
+      ],
+    ),
+    // ...
+  ],
+)
+```
+
+This scopes the suggestions box to the page's own overlay, so it slides out naturally with the page.
+
 ## Migrations
+
+### From 5.x to 6.x
+
+The package no longer depends on `flutter_keyboard_visibility` or `pointer_interceptor`. The following changes have been made:
+
+- `hideWithKeyboard` has been removed. This parameter never worked as intended, since closing the keyboard also loses focus, which is already handled by `hideOnUnfocus`. If you were using `hideWithKeyboard: false`, use `hideOnUnfocus: false` instead.
 
 ### From 4.x to 5.x
 
@@ -314,6 +358,9 @@ Additionally, various changes have been made to the API surface to make the pack
   - `onSuggestionSelected` -> `onSelected`
   - `suggestionsBoxVerticalOffset` -> `offset` (now also includes horizontal offset)
   - `hideSuggestionsOnKeyboardHide` -> `hideWithKeyboard`
+    Note: In v4, `hideSuggestionsOnKeyboardHide` also controlled whether the box closed on focus loss.
+    In v5, this is now two separate flags. If you were using `hideSuggestionsOnKeyboardHide: false`,
+    you will also need to set `hideOnUnfocus: false` to get the same behavior.
   - `keepSuggestionsOnSuggestionSelected` -> `hideOnSelect` (inverted)
   - `keepSuggestionsOnLoading`-> `retainOnLoading`
 - Some parameters have been removed:

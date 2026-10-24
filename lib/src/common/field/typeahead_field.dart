@@ -5,7 +5,6 @@ import 'package:flutter_typeahead/src/common/base/suggestions_controller.dart';
 import 'package:flutter_typeahead/src/common/box/suggestions_list.dart';
 
 import 'package:flutter_typeahead/src/common/base/types.dart';
-import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 /// {@template flutter_typeahead.RawTypeAheadField}
 /// A widget that shows suggestions above a text field while the user is typing.
@@ -31,7 +30,6 @@ abstract class RawTypeAheadField<T> extends StatefulWidget {
     this.hideOnLoading = false,
     this.showOnFocus = true,
     this.hideOnUnfocus = true,
-    this.hideWithKeyboard = true,
     this.hideOnSelect = true,
     required this.itemBuilder,
     this.itemSeparatorBuilder,
@@ -51,7 +49,7 @@ abstract class RawTypeAheadField<T> extends StatefulWidget {
   });
 
   /// Builds the text field that will be used to search for the suggestions.
-  final TextFieldBuilder builder;
+  final SuggestionsFieldBuilder builder;
 
   /// {@macro flutter_typeahead.SuggestionsSearch.textEditingController}
   final TextEditingController? controller;
@@ -92,14 +90,11 @@ abstract class RawTypeAheadField<T> extends StatefulWidget {
   /// {@macro flutter_typeahead.SuggestionsField.hideOnSelect}
   final bool hideOnSelect;
 
-  /// {@macro flutter_typeahead.SuggestionsField.hideWithKeyboard}
-  final bool hideWithKeyboard;
-
   /// {@macro flutter_typeahead.SuggestionsBox.scrollController}
   final ScrollController? scrollController;
 
   /// {@macro flutter_typeahead.SuggestionsBox.transitionBuilder}
-  final AnimationTransitionBuilder? transitionBuilder;
+  final SuggestionsAnimationBuilder? transitionBuilder;
 
   /// {@macro flutter_typeahead.SuggestionsBox.animationDuration}
   final Duration? animationDuration;
@@ -138,10 +133,10 @@ abstract class RawTypeAheadField<T> extends StatefulWidget {
   final IndexedWidgetBuilder? itemSeparatorBuilder;
 
   /// {@macro flutter_typeahead.SuggestionsBox.decorationBuilder}
-  final DecorationBuilder? decorationBuilder;
+  final SuggestionsDecorationBuilder? decorationBuilder;
 
   /// {@macro flutter_typeahead.SuggestionsList.listBuilder}
-  final ListBuilder? listBuilder;
+  final SuggestionsListBuilder? listBuilder;
 
   /// {@macro flutter_typeahead.SuggestionsSearch.debounce}
   final Duration? debounceDuration;
@@ -201,7 +196,6 @@ class _RawTypeAheadFieldState<T> extends State<RawTypeAheadField<T>> {
       showOnFocus: widget.showOnFocus,
       hideOnUnfocus: widget.hideOnUnfocus,
       hideOnSelect: widget.hideOnSelect,
-      hideWithKeyboard: widget.hideWithKeyboard,
       constraints: widget.constraints,
       constrainWidth: widget.constrainWidth,
       offset: widget.offset,
@@ -231,12 +225,10 @@ class _RawTypeAheadFieldState<T> extends State<RawTypeAheadField<T>> {
         itemSeparatorBuilder: widget.itemSeparatorBuilder,
         listBuilder: widget.listBuilder,
       ),
-      child: PointerInterceptor(
-        child: widget.builder(
-          context,
-          controller,
-          focusNode,
-        ),
+      child: widget.builder(
+        context,
+        controller,
+        focusNode,
       ),
     );
   }

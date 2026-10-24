@@ -1,4 +1,4 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_typeahead/src/common/field/typeahead_field.dart';
 import 'package:flutter_typeahead/src/common/base/types.dart';
 import 'package:flutter_typeahead/src/material/material_defaults.dart';
@@ -15,7 +15,7 @@ class TypeAheadField<T> extends RawTypeAheadField<T> {
     super.animationDuration,
     super.autoFlipDirection,
     super.autoFlipMinHeight,
-    TextFieldBuilder? builder,
+    SuggestionsFieldBuilder? builder,
     super.controller,
     super.debounceDuration,
     super.direction,
@@ -27,7 +27,6 @@ class TypeAheadField<T> extends RawTypeAheadField<T> {
     super.hideOnLoading,
     super.showOnFocus,
     super.hideOnUnfocus,
-    super.hideWithKeyboard,
     super.hideOnSelect,
     required SuggestionsItemBuilder<T> itemBuilder,
     super.itemSeparatorBuilder,
@@ -39,7 +38,7 @@ class TypeAheadField<T> extends RawTypeAheadField<T> {
     super.suggestionsController,
     required super.suggestionsCallback,
     super.transitionBuilder,
-    DecorationBuilder? decorationBuilder,
+    SuggestionsDecorationBuilder? decorationBuilder,
     super.listBuilder,
     super.constraints,
     super.constrainWidth,

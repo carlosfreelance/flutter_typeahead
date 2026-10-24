@@ -1,4 +1,4 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_typeahead/src/common/base/suggestions_controller.dart';
 import 'package:flutter_typeahead/src/common/base/types.dart';
@@ -76,7 +76,7 @@ abstract final class TypeAheadMaterialDefaults {
   /// A Wrapper around the suggestions box of a TypeAheadField.
   /// Adds various Material specific decorations.
   static SuggestionsItemBuilder<Widget> wrapperBuilder(
-    DecorationBuilder? builder,
+    SuggestionsDecorationBuilder? builder,
   ) {
     return (context, child) {
       return Material(

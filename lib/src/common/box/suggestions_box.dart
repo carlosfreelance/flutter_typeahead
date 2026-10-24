@@ -1,10 +1,8 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_typeahead/src/common/base/suggestions_controller.dart';
 import 'package:flutter_typeahead/src/common/base/types.dart';
 import 'package:flutter_typeahead/src/common/box/suggestions_box_animation.dart';
-import 'package:flutter_typeahead/src/common/box/suggestions_box_focus_connector.dart';
 import 'package:flutter_typeahead/src/common/box/suggestions_box_scroll_injector.dart';
-import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 /// A widget that contains suggestions based on user input.
 ///
@@ -61,7 +59,7 @@ class SuggestionsBox<T> extends StatelessWidget {
   ///
   /// This widget is always built, even when the suggestions box is closed.
   /// {@endtemplate}
-  final DecorationBuilder? decorationBuilder;
+  final SuggestionsDecorationBuilder? decorationBuilder;
 
   /// {@template flutter_typeahead.SuggestionsBox.transitionBuilder}
   /// Builder function for animating the suggestions box.
@@ -86,7 +84,7 @@ class SuggestionsBox<T> extends StatelessWidget {
   /// See also:
   /// * [animationDuration], which is the duration of the animation.
   /// {@endtemplate}
-  final AnimationTransitionBuilder? transitionBuilder;
+  final SuggestionsAnimationBuilder? transitionBuilder;
 
   /// {@template flutter_typeahead.SuggestionsBox.animationDuration}
   /// Duration of the animation for showing and hiding the suggestions box.
@@ -107,18 +105,15 @@ class SuggestionsBox<T> extends StatelessWidget {
       controller: controller,
       child: SuggestionsBoxScrollInjector(
         controller: scrollController,
-        child: SuggestionsBoxFocusConnector<T>(
-          controller: controller,
-          child: PointerInterceptor(
-            child: Builder(
-              builder: (context) => wrapper(
-                context,
-                SuggestionsBoxAnimation<T>(
-                  controller: controller,
-                  transitionBuilder: transitionBuilder,
-                  animationDuration: animationDuration,
-                  child: builder(context),
-                ),
+        child: ExcludeFocusTraversal(
+          child: Builder(
+            builder: (context) => wrapper(
+              context,
+              SuggestionsBoxAnimation<T>(
+                controller: controller,
+                transitionBuilder: transitionBuilder,
+                animationDuration: animationDuration,
+                child: builder(context),
               ),
             ),
           ),

@@ -6,10 +6,10 @@ import 'package:flutter_typeahead/src/common/base/suggestions_controller.dart';
 import 'package:flutter_typeahead/src/common/base/types.dart';
 import 'package:flutter_typeahead/src/common/field/suggestions_field_focus_connector.dart';
 import 'package:flutter_typeahead/src/common/field/suggestions_field_highlight_connector.dart';
-import 'package:flutter_typeahead/src/common/field/suggestions_field_keyboard_connector.dart';
 import 'package:flutter_typeahead/src/common/field/suggestions_field_box_connector.dart';
 import 'package:flutter_typeahead/src/common/field/suggestions_field_select_connector.dart';
 import 'package:flutter_typeahead/src/common/field/suggestions_field_tap_connector.dart';
+import 'package:flutter_typeahead/src/common/field/suggestions_field_scroll_connector.dart';
 
 /// A widget that displays a list of suggestions above or below another widget.
 class SuggestionsField<T> extends StatefulWidget {
@@ -26,7 +26,6 @@ class SuggestionsField<T> extends StatefulWidget {
     this.showOnFocus = true,
     this.hideOnUnfocus = true,
     this.hideOnSelect = true,
-    this.hideWithKeyboard = true,
     this.constraints,
     this.constrainWidth = true,
     this.offset,
@@ -148,21 +147,14 @@ class SuggestionsField<T> extends StatefulWidget {
   /// {@endtemplate}
   final bool hideOnSelect;
 
-  /// {@template flutter_typeahead.SuggestionsField.hideWithKeyboard}
-  /// Whether the suggestions box should be hidden when the keyboard is closed.
-  ///
-  /// Defaults to `true`.
-  /// {@endtemplate}
-  final bool hideWithKeyboard;
-
   /// {@macro flutter_typeahead.SuggestionsBox.scrollController}
   final ScrollController? scrollController;
 
   /// {@macro flutter_typeahead.SuggestionsBox.decorationBuilder}
-  final DecorationBuilder? decorationBuilder;
+  final SuggestionsDecorationBuilder? decorationBuilder;
 
   /// {@macro flutter_typeahead.SuggestionsBox.transitionBuilder}
-  final AnimationTransitionBuilder? transitionBuilder;
+  final SuggestionsAnimationBuilder? transitionBuilder;
 
   /// {@macro flutter_typeahead.SuggestionsBox.animationDuration}
   final Duration? animationDuration;
@@ -217,12 +209,15 @@ class _SuggestionsFieldState<T> extends State<SuggestionsField<T>> {
   Widget build(BuildContext context) {
     return SuggestionsControllerProvider<T>(
       controller: controller,
-      child: Floater(
-        link: link,
-        direction: switch (controller.direction) {
-          VerticalDirection.up => AxisDirection.up,
-          VerticalDirection.down => AxisDirection.down,
-        },
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, child) => Floater(
+          link: link,
+          visible: controller.isOpen,
+          direction: switch (controller.direction) {
+            VerticalDirection.up => AxisDirection.up,
+            VerticalDirection.down => AxisDirection.down,
+          },
         padding: EdgeInsets.only(
           top: widget.offset?.dy ?? 5,
           left: widget.offset?.dx ?? 0,
@@ -292,18 +287,17 @@ class _SuggestionsFieldState<T> extends State<SuggestionsField<T>> {
             value: controller,
             connect: (value) => value.$resizes.listen((_) => onResize()),
             disconnect: (value, key) => key?.cancel(),
-            child: SuggestionsFieldFocusConnector<T>(
+            child: SuggestionsFieldScrollConnector<T>(
               controller: controller,
-              focusNode: widget.focusNode,
-              child: SuggestionsFieldHighlightConnector<T>(
+              child: SuggestionsFieldFocusConnector<T>(
                 controller: controller,
-                child: SuggestionsFieldBoxConnector<T>(
+                focusNode: widget.focusNode,
+                child: SuggestionsFieldHighlightConnector<T>(
                   controller: controller,
-                  showOnFocus: widget.showOnFocus,
-                  hideOnUnfocus: widget.hideOnUnfocus,
-                  child: SuggestionsFieldKeyboardConnector<T>(
+                  child: SuggestionsFieldBoxConnector<T>(
                     controller: controller,
-                    hideWithKeyboard: widget.hideWithKeyboard,
+                    showOnFocus: widget.showOnFocus,
+                    hideOnUnfocus: widget.hideOnUnfocus,
                     child: SuggestionsFieldTapConnector<T>(
                       controller: controller,
                       child: SuggestionsFieldSelectConnector<T>(
@@ -319,6 +313,7 @@ class _SuggestionsFieldState<T> extends State<SuggestionsField<T>> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
