@@ -20,6 +20,7 @@ dependencies:
     sdk: flutter
   flutter_keyboard_visibility_temp_fork: ^0.1.5
   pointer_interceptor: ^0.10.1+2
+  material_ui: ^1.6.0
 
 dev_dependencies:
   flutter_test:
